@@ -1,0 +1,69 @@
+---
+title: "linear_model"
+author: "ww2745"
+date: "2024-11-07"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(p8105.datasets)
+
+set.seed(1)
+
+```
+
+Do some data cleaning
+```{r}
+data("nyc_airbnb")
+
+nyc_airbnb = 
+  nyc_airbnb |> 
+  mutate(stars = review_scores_location/2) |> 
+  rename(
+    borough= neighbourhood_group,
+    neighbourhood=neighbourhood
+  ) |> 
+  filter(
+    borough != "Staten Island"
+  ) |> 
+  select(price, stars, neighbourhood, borough, room_type) |> 
+  mutate(
+    borough= fct_infreq(borough) ##not in alphabet order but with freq order
+  )
+```
+
+#Fit some models
+
+Start relatively simple.
+```{r}
+fit = lm(price~stars, data=nyc_airbnb)
+
+summary(fit)
+
+names(summary(fit))
+
+coef(fit)
+
+broom::tidy(fit) ##can do it with tibble, samilar things with coef
+
+fit |> 
+  broom::tidy() |> 
+  select(term, estimate, p.value)
+```
+
+Try a bit more complex.
+
+```{r}
+fit=
+  lm(price ~ stars + borough, data=nyc_airbnb)
+
+fit |> 
+  broom::tidy() |> 
+  select(term, estimate, p.value) |> 
+  mutate(
+    term = str_replace(term, "borough","Borough:")
+  ) |> 
+  knitr::kable(digits=3)
+```
+
