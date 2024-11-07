@@ -67,3 +67,151 @@ fit |>
   knitr::kable(digits=3)
 ```
 
+## Some diagnostics
+
+(backtrack to some EDA)
+
+```{r}
+nyc_airbnb |> 
+  ggplot(aes(x=stars,y=price))+
+  geom_point()+
+  stat_smooth(method="lm")
+```
+
+
+Most diagnostics use residuals
+
+```{r}
+modelr::add_residuals(nyc_airbnb,fit) |> 
+  ggplot(aes(x=resid))+
+  geom_histogram()
+```
+
+```{r}
+modelr::add_residuals(nyc_airbnb,fit) |> 
+  ggplot(aes(x=borough, y=resid))+
+  geom_violin()+
+  ylim(-200,500) ##very screwed residuals
+```
+
+Residuals against fitted values
+
+@@@
+```{r}
+nyc_airbnb |> 
+  modelr::add_residuals(fit) |> 
+  modelr::add_predictions(fit) |> 
+  ggplot(aes(x=pred, y=resid))+
+  geom_point()
+```
+
+## Hypothesis testing
+
+```{r}
+fit |> 
+  broom::tidy()
+```
+
+
+```{r}
+fit_null=lm(price~stars+borough, data=nyc_airbnb)
+fit_alt=lm(price~stars+borough+room_type, data=nyc_airbnb)
+```
+
+Look at both
+```{r}
+fit_null |> 
+  broom::tidy()
+
+fit_alt |>
+  broom::tidy()
+
+anova(fit_null, fit_alt) |> 
+  broom::tidy()
+```
+
+## Do effects differ across boroughs
+
+First, use a lot of interactions
+
+```{r}
+nyc_airbnb |> 
+  lm(price~stars*borough+room_type*borough, data=_) |> 
+  broom::tidy()
+```
+
+Could just fit separate models.
+
+```{r}
+nyc_airbnb |> 
+  filter(borough=="Manhattan") |> 
+  lm(price~stars+room_type, data=_) |> 
+  broom::tidy()
+```
+
+Get fancy and use list columns.
+
+```{r}
+nyc_airbnb |> 
+  nest(data= -borough) |> 
+  mutate(
+    model= map(data, \(x) lm(price~stars+room_type, data = x)),
+    results = map(model, broom::tidy) ##same with previous block
+  ) |> 
+  select(borough, results) |>  ## table rearrangement
+  unnest(results) |> 
+  select(borough, term, estimate) |> 
+  pivot_wider(
+    names_from = term,
+    values_from= estimate ##want to compare
+  )
+```
+
+what about room type across manhattan neighbourhood?
+
+```{r}
+nyc_airbnb |> 
+  filter(
+    borough=="Manhattan",
+    neighbourhood=="Chinatown") |> 
+  lm(price~stars+room_type, data=_) |> 
+  broom::tidy()
+  
+```
+
+Let's do this for all neighbourhoods!
+
+```{r}
+manhattan_neighborhood_fit_df=
+  nyc_airbnb |> 
+    filter(borough=="Manhattan") |> 
+    nest(data=-(borough:neighbourhood)) |> 
+    mutate(
+      model = map(data, \(x) lm(price~stars+room_type, data=x)),
+      results=map(model, broom::tidy)
+    ) |> 
+    select(neighbourhood, results) |> 
+    unnest(results)
+```
+
+look at the effect of room type
+```{r}
+manhattan_neighborhood_fit_df |> 
+  filter(str_detect(term, "room_type")) |> 
+  ggplot(aes(x=term, y =estimate))+
+  geom_boxplot()
+```
+
+```{r}
+manhattan_neighborhood_fit_df |> 
+  filter(str_detect(term,"room_type")) |> 
+  filter(estimate>0)
+
+nyc_airbnb |> 
+  filter(
+    neighbourhood =="Noho",
+    room_type=="Shared room"
+  )
+```
+
+if you need to do logistic regression,use glm(), and need to tell the distribution,eg. family=binomial()
